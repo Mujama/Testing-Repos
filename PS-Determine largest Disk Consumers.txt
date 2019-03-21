@@ -1,0 +1,526 @@
+
+#makes sure that you can use the faster input method
+if ($host.name -ne 'ConsoleHost'){
+    Write-Host "`nPlease run this script in a normal or admin console"
+    return
+}
+###############
+#  Functions  #
+###############
+#This will return a string with a properly formatted size given bytes
+function Format-Size{
+    param($size) #The size in bytes
+    $ByteDescriptors = @("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", "WYGTMSB")
+    $string = ""
+    $PowerOfTwo = [Math]::Floor([Math]::Log($size)/[Math]::Log(2))
+    $index = [Math]::Floor($PowerOfTwo/10)
+    $string = ("{0:N1} " -f ($size / [Math]::Pow(2, ($index * 10)))) + ($ByteDescriptors[$index])
+    $string
+}
+function File-Exceptions{
+    if($PSVersionTable.PSVersion.Major -ge 3){
+        #open file dialog
+        $Dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $Dialog.initialDirectory = pwd
+        $Dialog.filter = "All files (*.*)| *.*"
+        $Dialog.ShowDialog() | Out-Null
+        #the selected file path
+        $arr = Get-Content $Dialog.filename
+    }else{
+        while(!$done){
+            Write-Host "`n`nplease enter path"
+            $path = stdin $false
+            if(Test-Path $path){
+                $arr = Get-Content $path
+                $done = $true;
+            }else{
+                Write-Host "`n`nnot a valid path"
+            }
+        }
+    }
+    $arr
+}
+function Folder-Select{
+    if($PSVersionTable.PSVersion.Major -ge 3){
+        #Open folder dialog
+        $Dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $Dialog.showNewFolderButton = $false
+        $Dialog.RootFolder = "MyComputer"
+        $Dialog.ShowDialog() | Out-Null
+        #return it's path
+        $Dialog.SelectedPath
+    }else{
+        while(!$done){
+            Write-Host "`n`nplease enter path"
+            $path = stdin $false
+            if(Test-Path $path){
+                $done = $true;
+            }else{
+                Write-Host "`n`nnot a valid path"
+            }
+        }
+        $path
+    }
+}
+function Lock-Top{
+    param($size)
+    $s = ""
+    #create the string of return chars to keep the output at the top of the screen
+    for($i = $size + 2; $i -lt $host.UI.RawUI.WindowSize.Height; $i++){
+        $s += "`n"
+    }
+    Write-Host $s
+}
+# stdin (standard input)
+####
+# This is used to get key input
+# if $true is true, it will return on keydown
+# if $true is false, it will return on enter
+function stdin{
+    param($fast)
+    $str = ""
+    if($fast){ #use fast input
+        $press = [Console]::ReadKey()
+        $str = $press.Key
+    }else{ #use standard input
+        $str = Read-Host
+    }
+     
+    return $str
+}
+# GetFolderSize
+####
+# This will get the folder size of the provided folde
+function GetFolderSize{
+    param($folder, $retDisp = $false)
+    #$folder = The folder to search
+    #$retDisp = If true, then this will create display objects for the folder and return them
+    $parentsize = 0  #The total size of all sub-folders
+    $toSearch = @()  #The list of folders that you can't get full access to
+    $display = @{}   #The list of display objects to return
+    #Loop through sub-folders
+    $folders = $folder.SubFolders
+    foreach($subFolder in $folders){
+        #Progress indicator
+        #write-host "+" -NoNewline
+         
+        #defalt assume the folder isn't excluded
+        $good = 1;
+        #go through all excludes
+        foreach($exc in $exclude){
+            if($exc.ToLower().Equals($subFolder.Path.ToLower())){
+                $good = -1;  #this folder is excluded by user
+                break;
+            }elseif($exc.ToLower().Contains($subFolder.Path.ToLower())){
+                $good = 0;   #this folder contains a folder excluded by the user
+            }
+        }
+        #The folder has not been excluded
+        if($good -eq 1 -and $subFolder.Size -ge 0){
+            #add the size to the parent
+            $size = $subFolder.Size
+            if($size -ge 0){
+                $parentSize += $size
+            }
+             
+            #Create it's display object
+            if($retDisp){
+                $display.Add($subFolder.Path, @{"name" = $subFolder.Name ;"folder" = $subFolder ;"color" = "green"; "size" = $size; "type" = "dir"})
+            }
+         
+        #The folder is excluded
+        }elseif($good -eq -1){
+        #The folder has a subfolder that is excluded or
+        #The folder has a subfolder that I don't have access to
+        }else{
+            #add this folder to the list to search deeper
+            $toSearch += $subFolder
+             
+            #Create it's display object
+            if($retDisp){
+                $display.Add($subFolder.Path, @{"name" = $subFolder.Name ;"folder" = $subFolder ;"color" = "yellow"; "size" = -1; "type" = "dir"})
+            }
+        }
+    }
+    #Loop through files
+    foreach($file in $folder.Files){
+        #Progress indicator
+        #write-host "-" -NoNewline
+        #Add size to parent folder
+        $size = $file.Size
+        if($size -gt 0){
+            $parentSize += $size
+            if($retDisp){
+                $display.Add($file.Path, @{"name" = $file.Name ;"color" = "gray" ;"folder" = $null ;"size" = $size; "type" = "fil"})
+            }
+        }
+    }
+    #return both the size of this folder, and the list of folders to search deeper
+    @($parentsize, $toSearch, $display)
+}
+# MinorPrint
+####
+# Prints each entery in the size graph
+# returns wether or not to keep sending more entries
+function MinorPrint{
+    param($e, $parentSize, $percentDetail, $num)
+    # $e = the entry to print
+    # $parentSize = the size of the parent folder
+    # $percentDetail = the size in characters of the bar graph
+    # $num = this entry's number
+    #calculate the percent of the parent 1 = 100%
+    $percent = $e.Value["size"] / $parentSize
+    #check if the percent is below the cut off point
+    if($percent * 100 -lt $percentCutoffs[$pci]){
+        #print the final line
+        Write-Host " <"($percentCutoffs[$pci])"% [" ($print.count - $num + 1) "Items ]"
+        return $false  #say stop sending more
+    }
+     
+    #check if we have a value for the entry
+    if(!($e.Value["size"] -lt 0)){
+        if($num -lt 10){
+            Write-Host "$num. " -NoNewline
+        }else{
+            Write-Host "   " -NoNewline
+        }
+        #print out the graph
+        for ($i = 1; $i -lt $percentDetail + 1; $i++){
+            if($i -lt $percent * $percentDetail){
+                Write-Host " " -b DarkGreen -NoNewline
+            }else{
+                Write-Host " " -NoNewline
+            }
+        }
+        #Print out the entry
+        $out = "( " + ("{0:P0}" -f $percent) + " ) " + (Format-Size $e.Value["size"]) + " " + $e.Value["name"]
+        try{
+            $out = $out.Substring(0,$host.UI.RawUI.WindowSize.Width - 4 - $percentDetail)
+        }catch [system.exception]{}
+        Write-Host $out -f $e.Value["color"]
+    #we don't have access to the directory
+    }else{
+        #print an empty graph
+        for ($i = 1; $i -lt $percentDetail + 1; $i++){
+            Write-Host " " -NoNewline
+        }
+        #print it in red
+        Write-Host "  " $e.Value["name"] -f "red"
+    }
+    #print that we can print more entries
+    return $true
+}
+# MasterPrint
+####
+# Manages the looping through all of the entries and sends them to MinorPrint
+function MasterPrint{
+    param($display, $parentSize, $percentDetail)
+    # $display = the hashtable of entries to display
+    # $parentSize = the size of the parent folder
+    # $percentDetail = the size in characters of the bar graph
+    # Sort $display by how big the entries are and store them in the array $print
+    [array]$print = $display.GetEnumerator() | Sort-Object @{Expression={$_.Value["size"]}; Ascending=$false}
+    $num = 0
+    # The base number of lines to print so the output stays at the top of the page
+    $base = 2
+    $count = $host.UI.RawUI.WindowSize.Height - $base
+    try{
+        foreach ($e in $print.GetEnumerator()) {
+            $num += 1
+            #print the entry
+            $worked = MinorPrint $e $parentSize $percentDetail $num
+             
+            #say that another line was taken up
+            $count -= 1
+            #stop sending entries if they are below the threshhold
+            if(!$worked){
+                break
+            }
+            #stop sending entries if there is no more room on the page
+            if($count -eq 3){
+                Write-Host "... Too Many to Print"
+                $count = 1
+                break
+            }
+        }
+    }catch [system.exception]{  #thrown if there is only one file/folder in the print array
+        MinorPrint $print $parentSize $percentDetail 1
+        $count -= 1
+    }
+    Lock-Top ($host.UI.RawUI.WindowSize.Height - $count)
+    #return the sorted array of entries
+    return $print
+}
+###################
+#  End Functions  #
+###################
+###########
+#  Setup  #
+###########
+#allows use of the FolderSelection dialog box
+[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null
+#the arraylist of exceptions
+[System.Collections.ArrayList]$exclude = @("C:\Windows\WinSxS");
+#the size of the graph in chars
+$percentDetail = 10
+#the steps of size that will be looped through
+$percentCutoffs = @(10, 1, 0.1, -1)
+#the file system object used for getting folder/file size
+$fso = new-object -ComObject scripting.filesystemobject\
+###############
+#  End Setup  #
+###############
+##################
+#  Main Program  #
+##################
+while(!$exit){
+    #print main menu
+    Write-Host "`n`n"
+    Write-Host "Welcome to PS-FolderSize"
+    Write-Host "------------------------"
+    Write-Host "[1] Start"
+    Write-Host "[2] Help/Options"
+    Write-Host "[3] Exceptions"
+    Write-Host "[4] Exit"
+    Lock-Top 6
+    $ui = stdin $true
+    $menu = $false
+    #run the main program
+    if("$ui".EndsWith("1")){
+         
+        $start = Folder-Select
+        if($start.Equals("")){
+            $menu = $true
+        }
+        #run the main loop
+        while(!$menu){
+            #get the start time
+            $time1 = (Get-Date)
+     
+            write-host "`n`n   Loading...`n"
+     
+            try{
+                $folder = $fso.GetFolder($start)
+            }catch [system.exception]{ #Thrown when you try and open a file
+                Write-Host "ERROR OPENING FOLDER"
+                $start = $start.Substring(0,$start.LastIndexOf('\'))
+                if($start.EndsWith(":")){
+                    $start += '\'
+                }
+                continue;
+            }
+            #The size of the selected folder
+            $parentSize = 0
+            #The hashtable of all the sub items
+            $display = @{}
+            #The hashtable of all the sub items that need searched
+            $toSearch = @{}
+            #The current percent cutoff level
+            $pci = 0
+            #Gets the folderSize of the selected folder
+            $ret = GetFolderSize $folder $true
+            #Add size to parent
+            $parentSize += $ret[0]
+            #Add display objects to the display
+            $display = $ret[2]
+             
+            #Add all it's tosearchs to the next search
+            foreach($e in $ret[1]){
+                $toSearch.Add($e, @{"display" = $e})
+            }
+             
+            #This will go through each layer deep and aproximate the size of the folders it doesn't
+            #have full acess to, or there is a subfolder that is excluded
+            while ($toSearch.Count -gt 0){
+                #The next batch of folders that need to be searched
+                $nextSearch = @{}
+                #Loop through the folders
+                foreach ($key in $($toSearch.keys)){
+                    #Progress indicator
+                    #write-host "`n|" -NoNewline
+                    Try{
+                        $ret = GetFolderSize $key
+                        #Add size to parent
+                        $display[$toSearch[$key]["display"].path]["size"] += $ret[0]
+                        $parentSize += $ret[0]
+                        #Add all it's tosearchs to the next search
+                        foreach($e in $ret[1]){
+                            $nextSearch.Add($e, @{"display" = $toSearch[$key]["display"]})
+                        }
+                    }Catch [system.exception]{ #Thrown if we don't have acess to this folder
+                    }
+                }
+                #reset for the next depth of search
+                $toSearch = $nextSearch
+            }
+             
+            #get the stop time
+            $time2 = (Get-Date)
+            #dump the current input
+            #this stops people from locking up the system with a lot of input durring loading times
+            $Host.UI.RawUI.FlushInputBuffer()
+            #Time indicator
+            #Write-host "`n`n`n Time to complete" ($time2 - $time1)
+            $rerun = $false
+            $p = $true
+            while(!$rerun){
+                if($p){
+                    Write-Host "---------------------------------`n$start"
+                    [array]$print = MasterPrint $display $parentSize $percentDetail
+                }
+                $p = $true
+                $ui = stdin($true)
+                $lastChar = "$ui".Substring("$ui".Length - 1, 1)
+                #Show the files/folders below the current cutoff point
+                if ("$ui".Equals("Spacebar")){
+                    $pci += 1;
+                    if($pci -ge $percentCutoffs.Count){
+                        $pci = $percentCutoffs.Count - 1
+                    }
+                #Return to menu
+                }elseif ("$ui".Equals("Escape")){
+                    $rerun = $true
+                    $menu = $true
+                #Go up a level
+                }elseif ("$ui".Equals("Tab")){
+                    $start = $start.Substring(0,$start.LastIndexOf('\'))
+                    #catches if they try and go up when they are already at the top
+                    if($start.EndsWith(":")){
+                        $start += '\'
+                    }
+                    $rerun = $true
+                #Go into a folder
+                }elseif ($lastChar -match "[1-9]"){
+                    $index = [convert]::ToInt32($lastChar, 10)
+                    if($index -gt 0 -and $index -le $print.Count){
+                        if(!$start.EndsWith("\")){
+                            $start += "\"
+                        }
+                         
+                        $start += $print[$index - 1].Value["name"]
+                         
+                        $rerun = $true
+                    }
+                #Select a new folder
+                }elseif("$ui".Equals("Enter")){
+                    $start = Folder-Select
+                    #if they hit cancel on the dialog
+                    if($start.Equals("")){
+                        $menu = $true
+                    }else{
+                        $rerun = $true
+                    }
+                 
+                #Open current folder in explorer
+                }elseif("$ui".Equals("Q")){
+                    try{
+                        ii (explorer $start)
+                    }catch [System.Exception]{}
+                    Write-Host "`n`n"
+                }
+            }
+        }
+    #Help and options
+    }elseif("$ui".EndsWith("2")){
+        Write-Host "`n"
+        Write-Host "------------------------"
+        Write-Host "Press [1-9]   to open the nth biggest folder"
+        Write-Host "Press [Tab]   to go to the current parent foler"
+        Write-Host "Press [Space] to see the smaller folders"
+        Write-Host "Press [Enter] to select a different folder to look from"
+        Write-Host "Press [q]     to open the current folder in explorer"
+        Write-Host "Press [Esc]   to return to the main menu"
+        Write-Host ""
+        Write-Host "Green  = Folder"
+        Write-Host "Yellow = Folder that you don't have full access to"
+        Write-Host "Red    = Folder that you have no access to"
+        Write-Host "Grey   = File"
+        Write-Host ""
+        Write-Host "Exceptions are the folders you don't wish to see the size of"
+        Write-Host "Adding big folders here will help speed up your search"
+        Write-Host ""
+        Write-Host "Press Any Key to Continue..."
+         
+        Lock-Top 16
+        stdin $true | Out-Null
+    #Exceptions
+    }elseif("$ui".EndsWith("3")){
+        while(!$menu){
+            Write-Host "`n"
+            Write-Host "------------------------"
+            Write-Host "[1] Add"
+            Write-Host "[2] Add From File"
+            Write-Host "[3] Remove"
+            Write-Host "[4] View"
+            Write-Host "[5] Back to Main Menu"
+             
+            Lock-Top 6
+            $ui = stdin $true
+             
+            #Add
+            if("$ui".EndsWith("1")){
+                $toEXC = Folder-Select
+                if(!$toEXC.equals("")){
+                    $exclude += $toEXC
+                }
+            #Remove
+            }elseif("$ui".EndsWith("2")){
+                $arr = File-Exceptions
+                Write-Host "`n"
+                Write-Host "------------------------"
+                Write-Host "Loded From file"
+                Write-Host ""
+                 
+                $num = 0
+                foreach($e in $arr){
+                    $num += 1
+                    Write-Host "$num." $e
+                    $exclude += $e
+                }
+                Write-Host ""
+                Write-Host "Press Any Key to Continue..."
+                Lock-Top (5 + $num);
+                stdin $true | Out-Null
+            #Remove
+            }elseif("$ui".EndsWith("3")){
+                Write-Host "`n"
+                Write-Host "------------------------"
+                 
+                #print all exclutions w/ a number to identify them
+                $num = 0
+                foreach($e in $exclude){
+                    $num += 1
+                    Write-Host "$num. $e"
+                }
+                Lock-Top ($num + 2)
+                Write-Host "`nNumber: " -NoNewline
+                $kill = stdin $false
+                #make sure that it's a valid number
+                if($kill -gt 0 -and $kill -le $exclude.Count){
+                    $exclude.RemoveAt($kill - 1)
+                }
+            #view
+            }elseif("$ui".EndsWith("4")){
+                Write-Host "`n"
+                Write-Host "------------------------"
+                #print all exclutions
+                $num = 0
+                foreach($e in $exclude){
+                    $num += 1
+                    Write-Host "$e"
+                }
+                Write-Host ""
+                Write-Host "Press Any Key to Continue...."
+                 
+                Lock-Top ($num + 3)
+                stdin $true | Out-Null
+            #return to main menu
+            }elseif("$ui".EndsWith("5")){
+                $menu = $true
+            }
+        }
+    #Exit the program
+    }elseif("$ui".EndsWith("4")){
+        return
+    }
+}

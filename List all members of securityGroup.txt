@@ -1,0 +1,3 @@
+EXEC master..xp_logininfo 
+@acctname = 'CHEMTREAT_NT\Apparatus - SQL',
+@option = 'members'

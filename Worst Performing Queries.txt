@@ -1,0 +1,22 @@
+SELECT
+	top 25 total_worker_time/execution_count AS [AvgCPU],
+	total_worker_time AS [Total CPU Time],
+	total_elapsed_time/execution_count AS [AvgDuration],
+	total_elapsed_time AS [TotalDuration],
+	total_logical_reads/execution_count AS [AvgReads],
+	total_logical_reads AS [TotalReads],
+	execution_count,
+	substring(str.text, (qs.statement_start_offset/2)+1
+	,((CASE qs.statement_end_offset when -1 then datalength(st.text)
+		ELSE qs.statement_end_offset
+		END - qs.statement _start_offset/2) +1) as text,
+	query_plan,
+	INTO  #miketemp
+FROM sys.dm_exec_query_stats as qs
+CROSS APPLY sys.dm_exec_sql_text (qs.sql_handle) as st
+CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) as qp
+
+select * from #miketemp
+ordery by AvgDuration desc;
+
+--drop table #miketemp

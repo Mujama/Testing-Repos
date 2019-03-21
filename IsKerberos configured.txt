@@ -1,0 +1,1 @@
+SELECT auth_scheme from sys.dm_exec_connections whre session_id = @@spid

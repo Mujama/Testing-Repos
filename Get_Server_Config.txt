@@ -1,0 +1,12 @@
+SELECT  ISNULL(SERVERPROPERTY('InstanceName'), '(default)') AS InstanceName,
+        SERVERPROPERTY('MachineName') AS OSName,
+        (SELECT TOP 1
+                Value_In_Use
+         FROM   sys.configurations
+         WHERE  name LIKE '%max%memory%') AS MaxMemory,
+        (SELECT Value_In_Use
+         FROM   sys.configurations
+         WHERE  name LIKE '%max%degree%') AS [MaxDop],
+        NULL AS HADRPort,
+        SERVERPROPERTY('Edition') AS [Edition],
+        SERVERPROPERTY('ProductVersion') AS Build

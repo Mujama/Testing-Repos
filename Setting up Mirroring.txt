@@ -1,0 +1,146 @@
+on host_A
+---------------------------------------------------
+
+USE master;
+CREATE CERTIFICATE PrimaryCert 
+   WITH SUBJECT = 'PrimaryCert for database mirroring', 
+   EXPIRY_DATE = '01/01/2099';
+GO
+
+
+
+create ENDPOINT  Mirroring  
+   STATE = STARTED  
+   AS TCP (  
+      LISTENER_PORT=5022
+      , LISTENER_IP = ALL  
+   )   
+   FOR DATABASE_MIRRORING (   
+      AUTHENTICATION = CERTIFICATE PrimaryCert  
+      , ENCRYPTION = REQUIRED ALGORITHM AES  
+      , ROLE = ALL
+   ); 
+
+
+BACKUP CERTIFICATE Primarycert TO FILE = 'F:\CertBackup\Primarycert.cer';
+GO
+
+
+CREATE LOGIN [MirrorSync] WITH PASSWORD ='icon5435'
+GO
+
+CREATE USER MirrorSync for LOGIN MirrorSync
+
+
+CREATE CERTIFICATE Secondarycert
+   AUTHORIZATION MirrorSync
+   FROM FILE = 'F:\CertBackup\Secondarycert.cer';
+GO
+--Grant CONNECT permission for the server instance on HOST_A.
+GRANT CONNECT ON ENDPOINT::Mirroring TO MirrorSync
+GO
+
+
+
+USE master;
+GO
+ALTER DATABASE DB_Name
+    SET PARTNER = 
+    'TCP://PARTNERHOST1:7022'
+GO
+
+
+
+--------------------------On Host_B--------------------------------------
+
+CREATE MASTER KEY ENCRYPTION BY PASSWORD = ' icon5435';  
+GO 
+
+
+CREATE CERTIFICATE Secondarycert   
+   WITH SUBJECT = 'VM-SQL-201-2 certificate for database mirroring',   
+   EXPIRY_DATE = '11/30/2099';  
+GO  
+
+create ENDPOINT  Mirroring  
+   STATE = STARTED  
+   AS TCP (  
+      LISTENER_PORT=5022
+      , LISTENER_IP = ALL  
+   )   
+   FOR DATABASE_MIRRORING (   
+      AUTHENTICATION = CERTIFICATE Secondarycert  
+      , ENCRYPTION = REQUIRED ALGORITHM AES  
+      , ROLE = ALL
+   );  
+GO
+
+
+BACKUP CERTIFICATE Secondarycert TO FILE = 'F:\CertBackup\Secondarycert.cer';
+GO
+
+SELECT name, protocol_desc, port, state_desc FROM sys.tcp_endpoints WHERE type_desc = 'DATABASE_MIRRORING'
+
+CREATE LOGIN [MirrorSync] WITH PASSWORD ='icon5435'
+GO
+
+CREATE USER MirrorSync for LOGIN MirrorSync
+
+
+-------------------------------Principal-----------------------------------------
+
+
+CREATE CERTIFICATE PrimaryCert
+   AUTHORIZATION MirrorSync
+   FROM FILE = 'F:\CertBackup\PrimaryCert.cer';
+GO
+--Grant CONNECT permission for the server instance on HOST_A.
+GRANT CONNECT ON ENDPOINT::Mirroring TO MirrorSync
+GO
+
+
+
+USE master;
+GO
+ALTER DATABASE DB_Name
+    SET PARTNER = 
+    'TCP://PARTNERHOST1:7022'
+GO
+
+
+
+*last step
+ALTER DATABASE AdventureWorks2008R2 
+    SET WITNESS = 
+    'TCP://WITNESSHOST4:7022'
+GO
+
+-------------------------------Witness-----------------------------------------
+
+CREATE ENDPOINT Endpoint_Mirroring
+    STATE=STARTED 
+    AS TCP (LISTENER_PORT=7022) 
+    FOR DATABASE_MIRRORING (ROLE=WITNESS)
+GO
+
+--which are both running as MYDOMAIN\dbousername:
+USE master ;
+GO
+CREATE LOGIN [MYDOMAIN\dbousername] FROM WINDOWS ;
+GO
+--Grant connect permissions on endpoint to login account 
+--of partners
+GRANT CONNECT ON ENDPOINT::Endpoint_Mirroring TO [MYDOMAIN\dbousername];
+GO
+
+
+--Create a login for the witness server instance,
+--which is running as SOMEDOMAIN\witnessuser:
+USE master ;
+GO
+CREATE LOGIN [SOMEDOMAIN\witnessuser] FROM WINDOWS ;
+GO
+--Grant connect permissions on endpoint to login account 
+--of partners
+GRANT CONNECT ON ENDPOINT::Endpoint_Mirroring TO [SOMEDOMAIN\witnessuser];
+GO

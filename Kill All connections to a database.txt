@@ -1,0 +1,23 @@
+declare @db_name varchar(50)
+declare @my_spid char(6)
+
+set @db_name = 'AdventureWorks'
+
+declare curPID cursor for
+	select spid from master.dbo.sysprocesses
+	where dbid = (select dbid from master.dbo.sysdatabases 
+		where name=@db_name)
+
+open curPID
+fetch next from curPID into @my_spid
+
+while @@fetch_status = 0
+begin
+	exec('kill ' + @my_spid )
+	print 'killed spid ' + @my_spid
+	fetch next from curPID into @my_spid
+end
+
+close curPID
+deallocate curPID
+go

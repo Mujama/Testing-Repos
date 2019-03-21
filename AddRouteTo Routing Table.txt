@@ -1,0 +1,3 @@
+$pppaddr=(Get-NetIPConfiguration -InterfaceAlias Virtusa).ipv4address | select ipaddress -ExpandProperty ipaddress
+route add 54.145.247.221 mask 255.255.255.255 $pppaddr
+route add 54.234.216.57 mask 255.255.255.255 $pppaddr 

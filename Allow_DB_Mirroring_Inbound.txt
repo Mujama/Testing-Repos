@@ -1,0 +1,66 @@
+Allow a Database Mirroring Endpoint to Use Certificates for Inbound Connections:
+
+
+1.Create a login for other system.
+2.Create a user for that login.
+3.Obtain the certificate for the mirroring endpoint of the other server instance.
+4.Associate the certificate with the user created in step 2.
+5.Grant CONNECT permission on the login for that mirroring endpoint
+
+
+
+1. Create a login for the other system. --On Server_A
+
+	USE master;  
+	CREATE LOGIN HOST_B_login   
+  	 WITH PASSWORD = 'Strong_Password12';  
+	GO  
+
+To view the logins on this server instance, you can use the following Transact-SQL statement:
+SELECT * FROM sys.server_principals 
+
+2.Create a user for that login.
+	USE master;  
+	CREATE USER HOST_B_user FOR LOGIN HOST_B_login;  
+	GO  
+To view the users on this server instance, you can use the following Transact-SQL statement:
+SELECT * FROM sys.sysusers;
+
+
+3.Obtain the certificate for the mirroring endpoint of the other server instance.
+
+4. Associate the certificate with the user created in step 2.
+The following example, associates the certificate of HOST_B with its user on HOST_A.
+
+	USE master;  
+	CREATE CERTIFICATE HOST_B_cert  
+   	AUTHORIZATION HOST_B_user  
+   	FROM FILE = 'C:\HOST_B_cert.cer'  
+	GO
+To view the certificates on this server instance, use the following Transact-SQL statement:
+	SELECT * FROM sys.certificates
+
+5.Grant CONNECT permission on the login for the remote mirroring endpoint.
+For example, to grant permission on HOST_A to the remote server instance on HOST_B to connect to its local login—that is, to connect to HOST_B_login—use the following Transact-SQL statements:
+
+	USE master;  
+	GRANT CONNECT ON ENDPOINT::Endpoint_Mirroring TO [HOST_B_login];  
+	GO 
+---------------------------------------------------------------------------------------------------
+USE master;  
+--On HOST_B, create a login for HOST_A.  
+CREATE LOGIN HOST_A_login WITH PASSWORD = 'AStrongPassword!@#';  
+GO  
+--Create a user, HOST_A_user, for that login.  
+CREATE USER HOST_A_user FOR LOGIN HOST_A_login  
+GO  
+--Obtain HOST_A certificate. (See the note   
+--   preceding this example.)  
+--Asscociate this certificate with the user, HOST_A_user.  
+CREATE CERTIFICATE HOST_A_cert  
+   AUTHORIZATION HOST_A_user  
+   FROM FILE = 'C:\HOST_A_cert.cer';  
+GO  
+--Grant CONNECT permission for the server instance on HOST_A.  
+GRANT CONNECT ON ENDPOINT::Endpoint_Mirroring TO HOST_A_login  
+GO  

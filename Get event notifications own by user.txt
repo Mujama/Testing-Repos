@@ -1,0 +1,21 @@
+
+
+SELECT p.NAME AS principal,
+
+       s.NAME AS EventNotif
+
+FROM sys.server_event_notifications s JOIN sys.server_principals p
+
+ON s.principal_id = p.principal_id
+
+ 
+
+--------------------------------------------------------------
+SELECT p.NAME AS principal,
+
+       s.NAME AS EventNotif
+
+FROM sys.server_event_notifications s JOIN sys.server_principals p
+
+ON s.principal_id = p.principal_id
+

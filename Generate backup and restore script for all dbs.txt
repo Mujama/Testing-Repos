@@ -1,0 +1,40 @@
+
+USE MASTER
+/*
+Create Backup and restore scripts for setting up mirror
+*/
+
+DECLARE @BackupPath VARCHAR(500)
+SELECT @BackupPath = 'G:\Backups_mirroring_Tlog\'
+
+SELECT name,
+		recovery_model_desc,
+		'BACKUP DATABASE [' + name + '] TO DISK = ' + '''' + @BackupPath + name + '_Mirror_Full.bak' + '''' + ' WITH FORMAT' AS FullBkUpSkpt,
+		'RESTORE DATABASE [' + name + '] FROM DISK = '+ '''' + @BackupPath + name + '_Mirror_Full.bak''' + ' WITH FILE = 1,  NORECOVERY,  NOUNLOAD,  STATS = 5'  AS RstrFullSkpt,
+		'BACKUP LOG [' + name + '] TO DISK = ' + '''' + @BackupPath + name + '_Mirror_Tlog.trn'''  AS TlogBkUpSkpt,
+		'RESTORE LOG [' + name + '] FROM DISK = ' + '''' + @BackupPath + name + '_Mirror_Tlog.trn''  WITH  FILE = 1,  NORECOVERY,  NOUNLOAD,  STATS = 10'   AS RstrTLogSkpt
+FROM sys.databases
+WHERE name NOT in
+	(
+		'_TempAccounting',
+		'CrawfordMag',
+		'JeffersonMagistrateAccounting',
+		'Lagato',
+		'WebGAJeffersonREAccounting',
+		'WebGAJeffersonRECommon',
+		'WebGARockdaleJury_Test',
+		'WebGAWhitfieldSuperiorAccounting_Demo',
+		'WebGAWhitfieldSuperiorCivil_Demo',
+		'WebGAWhitfieldSuperiorCommon_Demo',
+		'WebGAWhitfieldSuperiorCriminal_Demo',
+		'Master',
+		'Model',
+		'MSDB',
+		'Tempdb',
+		'distribution',
+		'Apparatus_DBA',
+		'Apparatus_DBA1'
+		
+  )  order by name desc
+
+

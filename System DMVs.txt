@@ -1,0 +1,3 @@
+select count(*) from sys.dm_os_workers  --- get number of worker threads that are being used.
+
+select max_worker_count from sys.dm_os_sys_info --get max

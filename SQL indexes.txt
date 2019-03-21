@@ -1,0 +1,144 @@
+---------------------------------------------Compressed Index--------------------------------------------
+CREATE CLUSTERED INDEX IX_PartTab2Col1 ON PartitionTable1 (Col1)
+WITH ( DATA_COMPRESSION = ROW ) ;
+
+
+---------------------------Fill Factor ---------------------------
+drop table Products
+
+CREATE TABLE Products
+(      
+ProductID SMALLINT NOT NULL,
+Description VARCHAR(75),  
+ProductRFID varchar(100) unique,     
+Price MONEY NOT NULL
+)
+
+create unique clustered index cl_AddressID on MyAddressList(AddressID)
+
+create unique nonclustered index ncl_PostalCode on MyAddressList(PostalCode)
+with (fillfactor = 80) 
+
+--------------------------------------------------------------------
+
+------------------------------Find Index Fragmentation ---------------------
+--When you perform INSERT, UPDATE, or DELETE statements, index fragmentation may occur and the information in the index 
+	--can get scattered in the database. 
+--Fragmented index data can cause SQL Server to perform unnecessary data reads and switching across different pages, 
+	--so query performance against a heavily fragmented table can be very poor.
+
+--There are basically two types of fragmentation: 
+	--1)External fragmentation (Logical Scan Fragmentation) - 
+		--External, a.k.a logical,  fragmentation occurs when an index leaf page is not in logical order, in other words 
+			--it occurs when the logical ordering of the index does not match the physical ordering of the index. 
+		--External fragmentation causes SQL Server to perform extra work to return ordered results. 
+		--External fragmentation isn’t too big of a deal for specific searches that return very few records or queries 
+			--that return result sets that do not need to be ordered.
+		--For anything over 25% fragmentation, rebuild index.
+		--For anything between 15% to 25% fragmentation, reorganize index.
+		
+	--2)Internal fragmentation - 
+		--Internal fragmentation occurs when there is too much free space in the index pages. Typically, some free space 
+			--is desirable, especially when the index is created or rebuilt. 
+		--You can specify the Fill Factor setting when the index is created or rebuilt to indicate a percentage of how 
+			--full the index pages are when created. 
+		--If the index pages are too fragmented, it will cause queries to take longer (because of the extra reads 
+			--required to find the dataset) and cause your indexes to grow larger than necessary. 
+		--If no space is available in the index data pages, data changes (primarily inserts) will cause page splits as 
+			--discussed above, which also require additional system resources to perform.
+		--For anything between 60 to 70% fragmentation, reorganize index.
+		--For anything less than 60% fragmentation, rebuild the index.
+
+-----------------------------------------------------------------------------------------------------
+
+--Dynamic Management Views and Functions
+
+--usage_stats
+select OBJECT_NAME(sys.dm_db_index_usage_stats.object_id),sys.indexes.name,sys.dm_db_index_usage_stats.* 
+from sys.dm_db_index_usage_stats 
+inner join sys.indexes on  sys.indexes.object_id = sys.dm_db_index_usage_stats.object_id and
+	sys.indexes.index_id = sys.dm_db_index_usage_stats.index_id
+
+--physical_stats
+SELECT * FROM sys.dm_db_index_physical_stats (7, 85575343, NULL, NULL , NULL);
+SELECT * FROM sys.dm_db_index_physical_stats (7, 85575343, NULL, NULL , 'detailed');
+
+SELECT object_name(IPS.object_id) AS [TableName], 
+   SI.name AS [IndexName], 
+   IPS.Index_type_desc, 
+   IPS.index_level,
+   IPS.avg_fragmentation_in_percent, --> It indicates the amount of external fragmentation you have 
+							--for the given objects. The lower the number the better 
+   IPS.avg_fragment_size_in_pages, 
+   IPS.avg_page_space_used_in_percent, --> It indicates on average how full each page in the index 
+						--is (internal fragmentation). The higher the number the better 
+   IPS.record_count, 
+   IPS.Page_count,
+   IPS.ghost_record_count,
+   IPS.fragment_count, -->A fragment is made up of physically consecutive leaf pages in the same 
+			--file for an allocation unit. So the less fragments the more data is 
+			--stored consecutively.
+   IPS.avg_fragment_size_in_pages -->Larger fragments mean that less disk I/O is required to read 
+		--the same number of pages. Therefore, the larger the avg_fragment_size_in_pages value, 
+		--the better the range scan performance.
+FROM sys.dm_db_index_physical_stats(7, 85575343, NULL, NULL , 'DETAILED') IPS
+INNER JOIN sys.tables ST WITH (nolock) ON IPS.object_id = ST.object_id
+INNER JOIN sys.indexes SI WITH (nolock) ON IPS.object_id = SI.object_id AND IPS.index_id = SI.index_id
+ORDER BY [TableName], [IndexName] 
+
+
+--select DB_ID('ADVENTUREWORKS')
+--select db_name(7) 
+select OBJECT_ID('Person.Address') 
+
+--------------------------------------------------------------------
+--REBUILD INDEX
+-- 1. ALTER INDEX with the REBUILD clause
+-- 2. CREATE INDEX with the DROP_EXISTING clause
+
+--ALTER INDEX with the REBUILD clause
+ALTER INDEX PK_Employee_EmployeeID ON HumanResources.Employee REBUILD
+WITH (FILLFACTOR = 80, SORT_IN_TEMPDB = ON, STATISTICS_NORECOMPUTE = OFF, ONLINE=ON);
+
+--Rebuilding all indexes on a table and specifying options
+ALTER INDEX ALL ON Production.Product REBUILD 
+WITH (FILLFACTOR = 100, SORT_IN_TEMPDB = ON, STATISTICS_NORECOMPUTE = ON);
+
+--CREATE INDEX with the DROP_EXISTING clause
+CREATE NONCLUSTERED INDEX [ncl_postalcode] ON [Person].[Address]([PostalCode] ASC)
+WITH (DROP_EXISTING = ON)
+
+ --Reorganize
+-------------
+--Reorganizing an index uses minimal system resources. It defragments the leaf level of clustered and nonclustered 
+	--indexes on tables and views by physically reordering the leaf-level pages.
+--Reorganizing also compacts the index pages( based on fill factor)
+--Reorganizing an index is always executed online.
+--Reorganizing a specified clustered index will compact all LOB columns that are contained in the leaf 
+	--level (data rows) of the clustered index.
+--Reorganizing a nonclustered index will compact all LOB columns that are nonkey (included) columns in the index. 
+------------------------------------------------------------------------------
+ALTER INDEX PK_Employee_EmployeeID ON HumanResources.Employee Reorganize
+		
+
+--Setting options on an index using alter index
+ALTER INDEX AK_SalesOrderHeader_SalesOrderNumber ON  Sales.SalesOrderHeader
+SET (
+	FILLFACTOR = 80,
+    STATISTICS_NORECOMPUTE = ON,
+    IGNORE_DUP_KEY = ON,
+    ALLOW_PAGE_LOCKS = ON
+    ) ;
+
+
+
+------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+

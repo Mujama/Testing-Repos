@@ -1,0 +1,48 @@
+$SQLOSNodes = "MIRALIMSPRDDB"
+$InstanceName = "PRDLIMSSQL2014"
+$RootPath = "D:\Program Files\Microsoft SQL Server\MSSQL12.PRDLIMSSQL2014\MSSQL"
+ 
+ 
+foreach($OS in $SQLOSNodes)
+{
+ invoke-command -ComputerName $OS -ScriptBlock {
+ param($InstanceName, $RootPath)
+  
+ $sqlroot = $RootPath
+ 
+IF ($InstanceName -eq "(default)")
+ 
+{$agentacct = "NT SERVICE\SQLSERVERAGENT"}
+else {
+ $agentacct = "NT SERVICE\SQLAGENT`$$($InstanceName)"
+ }
+ 
+ 
+ 
+ $env:computername
+ 
+ if(!(Test-Path "$($sqlroot)\MaintLogs"))
+ {
+ $MaintLogRoot = New-Item -ItemType Directory -Path $sqlroot -Name "MaintLogs"
+ }
+ 
+ $MaintLogRoot = Get-Item "$($sqlroot)\MaintLogs"
+  
+  
+ $Inherit = [System.Security.Accesscontrol.InheritanceFlags]"ContainerInherit, ObjectInherit"
+ $Propogation = [system.Security.AccessControl.PropagationFlags]"None"
+ $Acl = Get-Acl "$MaintLogRoot"
+ $Ar = New-Object System.Security.AccessControl.FileSystemaccessRule($agentacct, "FullControl", $Inherit, $Propogation, "Allow")
+ $Acl.AddAccessRule($Ar)
+ Set-Acl "$MaintLogRoot" $Acl
+  
+  
+ New-Item -ItemType Directory -Path "$MaintLogRoot" -Name "IndexOptimize"
+ New-Item -ItemType Directory -Path "$MaintLogRoot" -Name "TranBackup"
+ New-Item -ItemType Directory -Path "$MaintLogRoot" -Name "FullBackup"
+ New-Item -ItemType Directory -Path "$MaintLogRoot" -Name "DiffBackup"
+ New-Item -ItemType Directory -Path "$MaintLogRoot" -Name "IntegrityCheck"
+ New-Item -ItemType Directory -Path "$MaintLogRoot" -Name "ErrorLogCycle"
+ 
+ } -ArgumentList $InstanceName, $RootPath
+}

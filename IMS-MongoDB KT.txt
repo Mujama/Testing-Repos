@@ -1,0 +1,40 @@
+New Dev + UAT completed - part of the archive. Support for this should be minimal. 
+
+Work with Jason for Change Requests.
+
+
+--robomongo for archiving. 
+
+Thresholds - can be changes. currently 60 sec
+
+-Secondaries are used for reporting.
+
+
+If you have to take down a node -do after 8PM CST.
+
+Archiving - 120 GB.
+
+Last archive was 8/16 -may be done quarterly.
+
+-Sharding has been discussed but not being implemented. Dan Adams and Jason will be the contacts for implementing new features.
+
+-Implement the upgration dev.
+
+Can we develop dev envionment before the upgrade.
+
+
+
+------------------------2nd meeting--------------------------------------------------------
+
+we will manage both azure and the VM.
+
+
+Sharding- no formal review yet.
+
+Service Bus - is being used.
+Aggregation
+
+
+Customers are complaining about lagging reports as we speak.
+
+-Azure on the east had some issue - refer to the ticket they open with MS for more details.

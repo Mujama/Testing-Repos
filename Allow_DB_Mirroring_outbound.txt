@@ -1,0 +1,75 @@
+Setting up Database Mirroring:
+
+1. In the master database, create a database Master Key.
+2.In the master database, create an encrypted certificate on the server instance.
+3.Create an endpoint for the server instance using its certificate.
+4.Back up the certificate to a file and securely copy it to the other system or systems.
+
+1. create the database Master Key using the following Transact-SQL command:
+
+CREATE MASTER KEY ENCRYPTION BY PASSWORD = 'Strong_Password';  
+GO
+
+2.In the master database, create an encrypted certificate on the server instance to use for its outbound connections for database mirroring.
+
+USE master;  
+CREATE CERTIFICATE HOST_A_cert   
+   WITH SUBJECT = 'HOST_A certificate for database mirroring',   
+   EXPIRY_DATE = '11/30/2013';  
+GO 
+
+
+3.Ensure that the database mirroring endpoint exist on each of the server instances.
+
+	SELECT name, role_desc, state_desc, connection_auth_desc, encryption_algorithm_desc   
+   	FROM sys.database_mirroring_endpoints;
+If no endpoint exists, create an endpoint that uses this certificate for outbound connections and that uses the certificate's credentials for verification on the other system.
+
+CREATE ENDPOINT Endpoint_Mirroring  
+   STATE = STARTED  
+   AS TCP (  
+      LISTENER_PORT=7024  
+      , LISTENER_IP = ALL  
+   )   
+   FOR DATABASE_MIRRORING (   
+      AUTHENTICATION = CERTIFICATE HOST_A_cert  
+      , ENCRYPTION = REQUIRED ALGORITHM AES  
+      , ROLE = ALL  
+   );  
+GO  
+
+
+4. Back up the certificate and copy it to the other system or systems. This is necessary in order to configure inbound connections on the other system.
+BACKUP CERTIFICATE HOST_A_cert TO FILE = 'C:\HOST_A_cert.cer';  
+GO;
+
+--------------------------------------------------------------------------------------------------------
+USE master;  
+--Create the database Master Key, if needed.  
+CREATE MASTER KEY ENCRYPTION BY PASSWORD = '<Strong_Password_#2>';  
+GO  
+-- Make a certifcate on HOST_B server instance.  
+CREATE CERTIFICATE HOST_B_cert   
+   WITH SUBJECT = 'HOST_B certificate for database mirroring',   
+   EXPIRY_DATE = '11/30/2013';  
+GO  
+--Create a mirroring endpoint for the server instance on HOST_B.  
+CREATE ENDPOINT Endpoint_Mirroring  
+   STATE = STARTED  
+   AS TCP (  
+      LISTENER_PORT=7024  
+      , LISTENER_IP = ALL  
+   )   
+   FOR DATABASE_MIRRORING (   
+      AUTHENTICATION = CERTIFICATE HOST_B_cert  
+      , ENCRYPTION = REQUIRED ALGORITHM AES  
+      , ROLE = ALL  
+   );  
+GO  
+--Backup HOST_B certificate.  
+BACKUP CERTIFICATE HOST_B_cert TO FILE = 'C:\HOST_B_cert.cer';  
+GO   
+--Using any secure copy method, copy C:\HOST_B_cert.cer to HOST_A.  
+
+
+	

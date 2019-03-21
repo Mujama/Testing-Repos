@@ -1,0 +1,236 @@
+SET NOCOUNT ON
+CREATE TABLE #DBInfo_LastKnownGoodCheckDB
+    (
+      ParentObject varchar(1000) NULL,
+      Object varchar(1000) NULL,
+      Field varchar(1000) NULL,
+      Value varchar(1000) NULL,
+      DatabaseName varchar(1000) NULL
+    )
+ 
+DECLARE @DatabaseName varchar(1000),
+    @SQL varchar(8000),
+    @VersionMajor tinyint
+
+SELECT @VersionMajor = LEFT(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(100)), CHARINDEX('.', CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR(100)))-1)
+
+CREATE TABLE #DBInfo_VLF
+	(
+	  RecoveryUnitId int NULL,
+	  FileID int,
+	  FileSize bigint,
+	  StartOffset bigint,
+	  FSeqNo int,
+	  Status tinyint,
+	  Parity bigint,
+	  CreateLSN varchar(8000),
+	  DatabaseName sysname null
+	)
+DECLARE csrDatabases CURSOR FAST_FORWARD LOCAL
+    FOR SELECT  name
+        FROM    sys.databases
+        WHERE   name NOT IN ( 'tempdb' ) 
+        AND state_desc = 'ONLINE' /*can only get info for Online Databases*/
+        AND source_database_id IS NULL /* if get loginfo for mirror databases - causes nonyielding scheduler issue */
+        
+OPEN csrDatabases
+
+FETCH NEXT FROM csrDatabases INTO @DatabaseName
+
+WHILE @@FETCH_STATUS = 0
+    BEGIN
+            IF @VersionMajor >= 9 
+                BEGIN
+    --Create dynamic SQL to be inserted into temp table
+                    SET @SQL = 'DBCC DBINFO (' + CHAR(39) + @DatabaseName + CHAR(39) + ') WITH TABLERESULTS'
+
+    --Insert the results of the DBCC DBINFO command into the temp table
+                    INSERT  INTO #DBInfo_LastKnownGoodCheckDB
+                            (
+                              ParentObject,
+                              Object,
+                              Field,
+                              Value
+                            )
+                            EXEC ( @SQL
+                                )
+
+    --Set the database name where it has yet to be set
+                    UPDATE  #DBInfo_LastKnownGoodCheckDB
+                    SET     DatabaseName = @DatabaseName
+                    WHERE   DatabaseName IS NULL
+                END	    
+--Insert the results of DBCC LOGINFO
+            SET @SQL = 'DBCC LOGINFO(' + CHAR(39) + @DatabaseName + CHAR(39) + ')'
+
+			IF @VersionMajor >= 11
+			BEGIN
+				INSERT  INTO #DBInfo_VLF
+					(
+					  RecoveryUnitID, 
+					  FileID,
+					  FileSize,
+					  StartOffset,
+					  FSeqNo,
+					  Status,
+					  Parity,
+					  CreateLSN
+					)
+				EXEC (@SQL)
+			END
+			ELSE
+			BEGIN
+				INSERT INTO #DBInfo_VLF
+                    (
+                      FileID,
+                      FileSize,
+                      StartOffset,
+                      FSeqNo,
+                      Status,
+                      Parity,
+                      CreateLSN
+                    )
+                    EXEC ( @SQL
+                        )
+			END
+            UPDATE  #DBInfo_VLF
+            SET     DatabaseNAme = @DatabaseNAme
+            WHERE   DatabaseName IS NULL
+
+        FETCH NEXT FROM csrDatabases INTO @DatabaseName
+    END
+
+IF @VersionMajor >= 9
+    BEGIN
+	/*Eliminate duplicate rows*/
+        DELETE  FROM #DBInfo_LastKnownGoodCheckDB
+        WHERE   Field <> 'dbi_dbccLastKnownGood'
+    END ;
+ 
+
+WITH    LastFullBackup
+          AS ( SELECT   bs.database_name,
+                        MAX(bs.backup_finish_date) AS BackupDate
+               FROM     msdb..backupset bs
+               WHERE    bs.TYPE = 'D'
+               GROUP BY bs.database_name
+             ) ,
+        LastTranBackup
+          AS ( SELECT   bs.database_name,
+                        MAX(bs.backup_finish_date) AS BackupDate
+               FROM     msdb..backupset bs
+               WHERE    bs.TYPE = 'L'
+               GROUP BY bs.database_name
+             ) ,
+        LastDiffBackup
+          AS ( SELECT   bs.database_name,
+                        MAX(bs.backup_finish_date) AS BackupDate
+               FROM     msdb..backupset bs
+               WHERE    bs.TYPE = 'I'
+               GROUP BY bs.database_name
+             ) ,
+        DataSize
+          AS ( SELECT   database_id,
+                        SUM(CAST(size AS NUMERIC(18, 4)) * 8 / 1024 / 1024) AS Gig
+               FROM     sys.master_files
+               WHERE    type IN ( 0, 4 )
+               GROUP BY database_id
+             ) ,
+        LogSize
+          AS ( SELECT   database_id,
+                        SUM(CAST(size AS NUMERIC(18, 4)) * 8 / 1024 / 1024) AS Gig
+               FROM     sys.master_files
+               WHERE    type = 1
+               GROUP BY database_id
+             ),
+        DB_RestoreHistory
+          AS ( SELECT   [rs].[destination_database_name] ,
+                        [rs].[restore_date] ,
+                        [bs].[backup_start_date] ,
+                        [bs].[backup_finish_date] ,
+                        [bs].[database_name] AS [source_database_name] ,
+                        [bmf].[physical_device_name] AS [backup_file_used_for_restore],
+						ROW_NUMBER() OVER (PARTITION BY [rs].[destination_database_name] ORDER BY [rs].[restore_date] DESC) as RN
+               FROM     msdb..restorehistory rs
+                        INNER JOIN msdb..backupset bs ON [rs].[backup_set_id] = [bs].[backup_set_id]
+                        INNER JOIN msdb..backupmediafamily bmf ON [bs].[media_set_id] = [bmf].[media_set_id]
+             ),
+          DB_LastRestoreInfo
+           AS (SELECT destination_database_name ,
+                        restore_date as LastRestoreDate,
+                        backup_start_date ,
+                        backup_finish_date ,
+                        source_database_name,
+						backup_file_used_for_restore				
+           FROM DB_RestoreHistory RH
+           WHERE RH.RN = 1
+           
+           
+				)
+        
+    SELECT  DISTINCT
+            SERVERPROPERTY('servername') AS ServerName,
+            db.name AS DBName,
+            CAST(db.recovery_model_desc AS VARCHAR(255)) AS RecoveryModel,
+            CAST(db.is_auto_close_on AS varchar(255)) AS IsAutoClose,
+            CAST(db.is_auto_shrink_on AS VARCHAR(255)) AS IsAutoShrink,
+            ISNULL(LastFullBackup.BackupDate, '') AS LastFullBackup,
+            ISNULL(LastTranBackup.BackupDate, '') AS LastTranBackup,
+            ISNULL(LastDiffBackup.BackupDate, '') AS LastDiffBackup,
+            Datasize.Gig AS DataSize,
+            LogSize.Gig AS LogSize,
+            CAST(ISNULL(LastCHKDB.Value, '') AS DATETIME) AS LastSuccessfulCheckDB,
+            ISNULL(VLFCount.VLFCount, 0) AS VLFCount,
+            db.State_Desc AS DBState,
+            db.is_read_only AS IsReadOnly,
+            ISNULL((SELECT name FROM sys.databases inDB WHERE inDB.database_id = db.source_database_id), '') AS SnapOfDB,
+			ISNULL((SELECT page_verify_option_desc FROM sys.databases inDB WHERE inDB.name = db.name), '') AS page_verify_option_desc,
+            ISNULL(dbm.mirroring_partner_name , '') AS MirrorPartner,
+            ISNULL(dbm.mirroring_role_desc , '') AS MirrorRole,
+            ISNULL(dbm.mirroring_state_desc, '') AS MirrorState,
+            db.create_date AS CreateDate,
+            LR.LastRestoreDate ,
+            LR.source_database_name ,
+            LR.backup_file_used_for_restore
+            
+    FROM    sys.databases db
+            LEFT JOIN DataSize ON db.database_id = DataSize.database_id
+            LEFT JOIN LogSize ON db.database_id = logsize.database_id
+            LEFT JOIN LastFullBackup ON db.name = LastFullBackup.database_name
+            LEFT JOIN LastTranBackup ON db.name = LastTranBackup.database_name
+            LEFT JOIN LastDiffBackup on db.name = LastDiffBackup.database_name
+            LEFT JOIN #DBInfo_LastKnownGoodCheckDB LastCHKDB ON db.name = LastCHKDB.DatabaseName
+            LEFT JOIN sys.database_mirroring dbm on db.database_id = dbm.database_id
+            LEFT JOIN ( SELECT  DatabaseName,
+                                COUNT(FileID) AS VLFCount
+                        FROM    #DBInfo_VLF
+                        GROUP BY DatabaseName
+                      ) VLFCount ON db.name = VLFCount.DatabaseName
+            LEFT JOIN DB_LastRestoreInfo LR ON db.name = LR.destination_database_name
+
+			WHERE db.name in
+	(
+	
+	'_TempAccounting',
+		'CrawfordMag',
+		'JeffersonMagistrateAccounting',
+		'Lagato',
+		'WebGAJeffersonREAccounting',
+		'WebGAJeffersonRECommon'
+	/*	'WebGARockdaleJury_Test',
+		'WebGAWhitfieldSuperiorAccounting_Demo',
+		'WebGAWhitfieldSuperiorCivil_Demo',
+		'WebGAWhitfieldSuperiorCommon_Demo',
+		'WebGAWhitfieldSuperiorCriminal_Demo',
+		'Master',
+		'Model',
+		'MSDB',
+		'Tempdb'
+    */
+	)
+
+
+    ORDER BY Datasize.Gig , db.name
+
+DROP TABLE #DBInfo_LastKnownGoodCheckDB
+DROP TABLE #DBInfo_VLF

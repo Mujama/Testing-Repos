@@ -1,0 +1,106 @@
+
+USE MASTER
+/*
+Create Backup and restore scripts for setting up mirror
+*/
+
+DECLARE @BackupPath VARCHAR(500)
+SELECT @BackupPath = 'G:\Backups_mirroring\'
+
+SELECT NAME,'ALTER DATABASE '+ name +  ' SET PARTNER = ''TCP://VM-SQL-2014-2:5022''' AS PRICINPAL,
+	'ALTER DATABASE '+name+ ' SET PARTNER = ''TCP://VM-SQL-2014:5022''' MIRROR
+		
+FROM sys.databases
+WHERE name NOT in  ---excluded DBs
+	(
+		'_TempAccounting',
+		'CrawfordMag',
+		'JeffersonMagistrateAccounting',
+		'Lagato',
+		'WebGAJeffersonREAccounting',
+		'WebGAJeffersonRECommon',
+		'WebGARockdaleJury_Test',
+		'WebGAWhitfieldSuperiorAccounting_Demo',
+		'WebGAWhitfieldSuperiorCivil_Demo',
+		'WebGAWhitfieldSuperiorCommon_Demo',
+		'WebGAWhitfieldSuperiorCriminal_Demo',
+		'Master',
+		'Model',
+		'MSDB',
+		'Tempdb',
+		'distribution',
+		'Apparatus_DBA',
+		'Apparatus_DBA1',
+		'ReportServer',
+		'ReportServerTempDB'
+		
+  ) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------------WITH CURSOR----------------------------------------------------
+--ALTER DATABASE Apparatus_DBA1 SET PARTNER = 'TCP://VM-SQL-2014-2:5022';
+
+USE MASTER
+declare
+	@isql varchar(2000),
+	@dbname varchar(100),
+	@recovery varchar(200)
+	--@logfile varchar(128)
+	
+
+
+	declare c1 cursor for 
+	select  name
+	from sys.databases 
+	where name not in
+	(
+	'WebGAJeffersonJuvenile',
+	'WebGAJeffersonJuvenileAccounting',
+	'WebGAJeffersonJuvenileCivil',
+	'WebGAJeffersonJuvenileCommon',
+	'_TempAccounting',
+		'CrawfordMag',
+		'JeffersonMagistrateAccounting',
+		'Lagato',
+		'WebGAJeffersonREAccounting',
+		'WebGAJeffersonRECommon',
+		'WebGARockdaleJury_Test',
+		'WebGAWhitfieldSuperiorAccounting_Demo',
+		'WebGAWhitfieldSuperiorCivil_Demo',
+		'WebGAWhitfieldSuperiorCommon_Demo',
+		'WebGAWhitfieldSuperiorCriminal_Demo',
+		'Master',
+		'Model',
+		'MSDB',
+		'Tempdb',
+		'Apparatus_DBA',
+		'Apparatus_DBA1'
+	)
+
+		
+	open c1
+	fetch next from c1 into @dbname
+	While @@fetch_status <> -1
+		begin
+		select @isql = 'ALTER DATABASE ' + @dbname + ' SET PARTNER = ''TCP://VM-SQL-2014-2:5022'''
+		exec(@isql)
+		print @isql
+		
+		fetch next from c1 into @dbname
+		end
+	close c1
+	deallocate c1
+
+
+

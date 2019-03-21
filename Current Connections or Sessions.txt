@@ -1,0 +1,9 @@
+SELECT 
+conn.session_ID as SPID,
+conn.client_net_address as IPAddress,
+sess.host_name as MachineName,
+sess.program_name as ApplicationName,
+login_name as LoginName
+FROM sys.dm_exec_connections conn
+inner join sys.dm_exec_sessions sess
+on conn.session_ID=sess.session_ID
