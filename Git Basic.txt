@@ -1,0 +1,57 @@
+1. Launch Git bash and type pwd to print working dir
+	pwd
+2. Create new directory where Git files will stored. 
+	mkdir Git-Projects
+3.  change directory to Git-Projects
+	Cd Git-Projects
+4. Now create new repository
+	git init demo-repository
+	cd demo-repository
+5. Git states:
+	1- Working directory which may or may be managed by Git. Either way Git is 		aware of these files
+	2- Staging Area. This is where the files are prepared.
+	3- Repository (.git folder) or commit history which contains all the 	committed/saved changes to the Git repository. Anything here is part of 	Git's history 
+	4- Remote?
+
+6. First Commit.
+	git status # to see what going on in Git repository.
+	#create new file in the repository 
+	notepad README.md # add some text to the file.
+	git status
+	git add README.md # this moves the file from the working directory to the 			staging directory.
+	git status
+	git commit -m "First file in Demo Repo" # This will commit the change.
+	
+	git ls-fles #To the files git is tracking
+
+7.Backing out of changes/Unstage:
+	git reset HEAD filename # this will unstage the file
+	git checkout -- filename # this will remove/backout of the changes.
+8. Git Details with Log and Show
+	git log
+	git show
+	git help log
+	git log --online --graph --decorate --all
+9. Alias
+	gti config --global alias.hist "log --online --graph --decorate --all" 
+	git config --global --list # to see if the alias was created.
+	git hist # To test the newly created alias
+10. Renaming files managed by Git.
+	#Git is smart enough to realize that the file has been renamed. It will 	stage the changes and has to committed just like any other change.
+	#i.e let's rename readme.md file
+	git mv readme.md demo.tx"
+	git status # to see git status
+	git commit -m "renaming readme.md to domo.txt"
+
+#If you wanted to delete file tracked by Git, it better to delete thru Git so Git        will track the deletion as well instead of deleting the file at the OS leve.
+10. Managing Files Outside of Git.
+	git add -A # will cover all modification on the working directory.
+11. Exclude unwanted files.
+	mate.gitignore # add the filename to the file use expression i.e *.log
+
+***********************************Advanced Topics******************************
+
+	
+1. Comparing Differences
+
+ 

@@ -1,0 +1,70 @@
+1 - Install and confiure Git
+
+	A. Download Git from Git-for-Windows.github.io or git-scm.com
+	or http://git-scm.com/downloads/win
+	B. Run the installer
+#changes:
+
+	-For Adjusting your path environment select: Use Git from the Windows 			Command Prompt option.
+	-For Configuring teh line ending conversions select: Checkout as-is, 			commit as-is option if you're working with Windows only. 
+	 If you are working with cross-planform select : Checkout as-is, commit 	 	Unix-style line ending.
+	-For terminal emulator leave the default - Use MinTTY.
+#verify the installation after completed by double the Git Bash icon on the 	desktop or in taskbar. then type
+	git version # press enter
+	This should return the version of the installed Git.
+
+#Git Window Adjustments:
+	- Adjust the window click on the Git icon on the top left hand corner then 	  options. To synch the changes close and reopen Git.
+
+#Getting Help
+	- Type git help plus the command name
+		i.e git help config
+#perform the minimal configuration for Git
+	in Git bash type:
+	git config --global --list # to get config lists
+
+	git config --global user.name "Enter your name here"
+	git config --global user.email "Ener your email here"
+
+	git ~/.gitconfig
+
+
+2. Install Notepad++ and Integrate it with Git
+	a. install Notepad++
+	b. add Notepad++ file path to the system variables.
+#Notepad++ Git Integration
+	-Type
+	notepad++ .bash_profile # This command should be executed in user's home 	directory. when prompted to create new file, say 'yes'
+  -Create aliase for notepad++
+
+	alias npp='notepad++.exe' -multi-Inst -nosession' # save and exit.Now test 	your new alias by exitting and re-launching Git. 
+  - Set Notepad++ as your default text editor
+	type:
+  git config --global core.editor "notepad++.exe -MultiInst -nosession"
+ - confirm that the change was made by typing:
+  git config --list
+  git config --global -e # to edit the configuration. it be open with Notep++
+
+3. Install P4Merge and Integrate it with Git
+  - Download it from www.perforce.com/downloads, select P4MERGE VISUAL MERGE TOOL
+  -Under Select Featuers : de-select all options except Visual Merge Tool(P4Merge)
+  - Once the installation completes, test the P4Merge by typing:
+	p4merge # in cmd, gitbash or powershell. if it is not accessible, add it 	to the system path variables.
+#Configure Git to use P4Merge for diff and the merge resolution tool.
+  -lauch Git Bash and type:
+	git config --global merge.tool p4merge
+	git config --global mergetool.p4merge.path "C:/Program 		Files/Perforce/P4Merge.exe" #or where the file is. 
+# the next command will tell Git not to prompt whether or not to launch P4Merge every time we need to resolve a conflict. 
+	git config --global mergetool.prompt false
+#Now let's setup the Diff tool.
+	git config --global diff.tool p4merge
+	git config --global difftool.p4merge.path "C:/Program 				Files/Perforce/P4Merge.exe"
+  	git config --global difftool.prompt false
+	
+git config --global --list
+
+
+
+
+
+

@@ -1,0 +1,5 @@
+*Git
+*Microsoft SQL Server Data Tools - Business Intelligence for Visual Studio 2013
+
+1. Notepad++
+2. P4GMerge
