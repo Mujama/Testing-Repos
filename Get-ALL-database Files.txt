@@ -1,0 +1,44 @@
+ CREATE TABLE #Database_File
+ (
+	[Db_name] [sysname] NOT NULL,
+	[File Name] [sysname] NOT NULL,
+	[Physical Name] [nvarchar](260) NULL,
+	[Total Size in MB] [numeric](17, 6) NULL,
+	[Available Space In MB] [numeric](18, 6) NULL,
+	[type_desc] [nvarchar](60) NULL
+ )
+ GO
+DECLARE @db_name NVARCHAR(200)='';
+DECLARE @sql NVARCHAR(MAX);
+ 
+
+DECLARE curDBs CURSOR FOR
+	SELECT name from sys.databases;
+OPEN curDBs
+FETCH NEXT FROM curDBs INTO @db_name;
+WHILE @@FETCH_STATUS =0
+BEGIN
+	
+		
+SET @sql = 'USE '+@db_name +'; SELECT db_name(database_id) AS 	[Db_name],
+	df.name AS [File Name] , df.physical_name AS [Physical Name], 
+	df.size/128.0 AS [Total Size in MB],
+	df.size/128.0 - CAST(FILEPROPERTY(df.name, ''SpaceUsed'') AS 	int)/128.0 AS [Available Space In MB], df.type_desc
+         FROM sys.database_files as df
+  	INNER JOIN sys.master_files as mf
+	ON df.file_guid = mf.file_guid';
+
+  INSERT INTO #Database_File
+  EXEC(@sql);
+	--WHERE db_name(database_id)= @db_name
+
+FETCH NEXT FROM curDBs INTO @db_name;
+END
+
+CLOSE curDBs
+DEALLOCATE curDBs
+
+
+SELECT  * FROM #Database_File WHERE [Db_name] = 'tempdb'
+
+DROP TABLE #Database_File
