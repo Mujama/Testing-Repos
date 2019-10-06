@@ -1,0 +1,10 @@
+1. Create new users and add it to the domain
+
+	NET USER NAME PASSW0Rdd /ADD /DOMAIN
+2. Add a ser to domain group and local administrators group.
+	NET GROUP "Domain Admins" mjama /ADD /DOMAIN
+	NET 	LOCALGROUP ADMINISTRATORS mjam /ADD
+
+3. View members of a group
+ 	NET GROUP "Domain Admins"
+	NET LOCALGROUP ADMINISTRATORS
